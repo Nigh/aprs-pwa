@@ -34,16 +34,14 @@ export function generateAPRSPacket(
   const lon = formatLongitude(longitude);
   
   // Build the APRS packet
-  // Format: CALLSIGN>APRS,RELAY:/hhmmz/LAT/LON/additionaltext
-  const timestamp = new Date();
-  const hours = String(timestamp.getUTCHours()).padStart(2, '0');
-  const minutes = String(timestamp.getUTCMinutes()).padStart(2, '0');
-  
-  let packet = `${cleanCallsign}>APRS,RELAY:/${hours}${minutes}z${lat}${lon}`;
+  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[additionaltext
+  let packet = `${cleanCallsign}>APRS,TCPIP*:!${lat}/${lon}[`;
   
   if (additionalText) {
-    packet += `/${additionalText}`;
+    packet += `${additionalText}`;
   }
+  
+  packet += `\r\n`;
   
   return packet;
 }
@@ -113,18 +111,24 @@ export async function transmitAPRSPacket(
   passcode: string
 ): Promise<APRSTransmissionResult> {
   try {
-    // Note: Direct TCP connection from browser is not possible
-    // This would need a backend service or WebSocket proxy
-    // For now, we'll simulate the transmission and log it
-    
-    const loginPacket = `user ${callsign} pass ${passcode} vers APRS-TX 1.0`;
-    
-    console.log('APRS Transmission:');
-    console.log('Login:', loginPacket);
-    console.log('Data:', packet);
-    
-    // Simulate successful transmission
-    // In production, this should call a backend endpoint
+    const response = await fetch('https://aprs-proxy.jiyucheng007.workers.dev/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        callsign: callsign,
+        passcode: passcode,
+        packet: packet,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
     return {
       success: true,
       message: `APRS packet transmitted successfully for ${callsign}`,
