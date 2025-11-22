@@ -10,12 +10,13 @@ export default defineConfig({
     AstroPWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Astro PWA Starter',
-        short_name: 'AstroPWA',
-        description: 'Astro + Svelte + Tailwind + DaisyUI PWA',
-        theme_color: '#ffffff',
+        name: 'APRS-TX Transmitter',
+        short_name: 'APRS-TX',
+        description: 'Automatic Packet Reporting System Transmitter for Amateur Radio',
+        theme_color: '#3b82f6',
         background_color: '#ffffff',
         display: 'standalone',
+        categories: ['amateur-radio', 'communication'],
         icons: [
           {
             src: '/pwa-192x192.png',
