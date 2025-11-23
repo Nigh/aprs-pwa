@@ -1,8 +1,19 @@
-# Astro PWA Template (Svelte + Tailwind + DaisyUI)
+# APRS-TX Transmitter (Automatic Packet Reporting System)
 
-This is a production-ready starter template for building Progressive Web Apps (PWA) using **Astro 5**. It combines the performance of Astro with the interactivity of Svelte, styled with Tailwind CSS v4 and DaisyUI.
+A Progressive Web Application for amateur radio operators to transmit their GPS location and messages via the APRS network. Built with **Astro 5**, **Svelte 5**, **Tailwind CSS v4**, and **DaisyUI**.
 
-<img width="418" height="491" alt="image" src="https://github.com/user-attachments/assets/406e1423-9bb8-43c5-b745-76acd93ee216" />
+This application is based on the **Astro PWA Template** - a production-ready starter for building PWAs with Astro, Svelte, Tailwind CSS v4, and DaisyUI.
+
+## APRS-TX Features
+
+- 📍 **GPS Location Sharing** - Automatic location retrieval and APRS packet assembly
+- 📤 **Manual Transmission** - Send packets on demand with real-time feedback
+- ⏰ **Scheduled Transmissions** - Set up automatic beacon transmissions at configurable intervals (minimum 30 seconds)
+- 📱 **Mobile Optimized** - Fully responsive design for desktop and mobile devices
+- 📡 **APRS Compliant** - Generates proper APRS packet format for network compatibility
+- 🔔 **Real-time Notifications** - Success and error alerts for all transmission attempts
+- 📴 **Offline Capable** - PWA technology enables offline functionality with service worker
+- 🚀 **Fast & Lightweight** - Optimized build with excellent Lighthouse performance
 
 ## 🚀 Tech Stack
 
@@ -13,7 +24,7 @@ This is a production-ready starter template for building Progressive Web Apps (P
 * **PWA:** [Vite Plugin PWA](https://vite-pwa-org.netlify.app/)
 * **Routing:** Astro View Transitions
 
-## ✨ Features
+## ✨ Base Template Features
 
 * **💯 Lighthouse Score:** Optimized for speed and SEO.
 * **📱 Installable:** Fully configured `manifest.webmanifest` and Service Worker.
@@ -30,18 +41,18 @@ This is a production-ready starter template for building Progressive Web Apps (P
 
 1.  **Clone the repository:**
     Click the `Use this template` button in the GitHub repo page.  
-	Then choose `Create a new repository`.
+    Then choose `Create a new repository`.
 
 2.  **Install dependencies:**  
-	In the repo you create:
+    In the repo you create:
     ```bash
     npm install
     ```
 
 3.  **Start dev server**
-	```bash
-	npm run dev
-	```
+    ```bash
+    npm run dev
+    ```
 
 ## 🧞 Commands
 
@@ -52,23 +63,51 @@ This is a production-ready starter template for building Progressive Web Apps (P
 | `npm run preview` | Preview your build locally |
 | `npm run astro ...` | Run CLI commands like `astro add` |
 
+## 🚀 GitHub Pages Deployment
+
+This project is configured to automatically build and deploy to GitHub Pages using GitHub Actions.
+
+### Workflow
+
+The `.github/workflows/build-deploy-gh-pages.yml` workflow:
+- Triggers on push to `main` or `dev` branches
+- Runs on pull requests for validation
+- Builds the Astro PWA application with `npm run build`
+- Deploys the `dist/` folder to GitHub Pages
+
+### Configuration
+
+- **Base path:** Set to `/aprs-pwa/` in `astro.config.mjs` for project site deployment
+- **Deployment URL:** `https://nigh.github.io/aprs-pwa/`
+- **Auto-deployment:** Enabled for `main` and `dev` branches
+
+### Enable GitHub Pages
+
+1. Go to your repository settings
+2. Navigate to **Pages** section
+3. Select **Deploy from a branch** as the source
+4. Choose `gh-pages` branch (created automatically by the workflow)
+5. Click **Save**
+
+The workflow will handle building and deploying automatically on each push!
+
 ## ✅ Develop Tips
 
 > [!TIP]
 > You **must** add your icons to the `public/` folder for the PWA to be installable:  
->	* `public/pwa-192x192.png`  
+>    * `public/pwa-192x192.png`  
 >   * `public/pwa-512x512.png`  
 >   * `public/favicon.svg`
 
 
 > [!TIP]
 > The `Reload` prompt usually does not show up in npm run dev mode because the service worker behavior is different in development.
->	* you should build the project by: `npm run build`
->	* Then preview the build: `npm run preview`
->	* Open the preview URL (usually `localhost:4321`) in your browser.
->	* Go to your code and make a small visible change, then run `npm run build` again.
->	* Go back to the `localhost:4321` page and refresh manually once.
->	* The Service Worker will detect the new hash in the background, and the Toast should pop up asking you to "Reload" to apply the new version.
+>    * you should build the project by: `npm run build`
+>    * Then preview the build: `npm run preview`
+>    * Open the preview URL (usually `localhost:4321`) in your browser.
+>    * Go to your code and make a small visible change, then run `npm run build` again.
+>    * Go back to the `localhost:4321` page and refresh manually once.
+>    * The Service Worker will detect the new hash in the background, and the Toast should pop up asking you to "Reload" to apply the new version.
 
 
 
@@ -83,13 +122,17 @@ This is a production-ready starter template for building Progressive Web Apps (P
 │   └── manifest.webmanifest # Auto-generated by build
 ├── src/
 │   ├── components/
-│   │   ├── ReloadPrompt.svelte  # PWA Update Toast
-│   │   └── Counter.svelte       # Example Svelte Component
+│   │   ├── APRSTransmitter.svelte   # APRS-TX Main Component
+│   │   └── ReloadPrompt.svelte      # PWA Update Toast
 │   ├── layouts/
-│   │   └── Layout.astro         # Contains <ClientRouter> & PWA Logic
+│   │   └── Layout.astro             # Contains <ClientRouter> & PWA Logic
+│   ├── lib/
+│   │   └── aprs.ts                  # APRS Utility Functions
 │   ├── pages/
-│   │   └── index.astro          # Main Entry
+│   │   └── index.astro              # Main APRS-TX Application
 │   └── styles/
-│       └── global.css           # Tailwind @import & DaisyUI @plugin
-├── astro.config.mjs             # Vite PWA & Tailwind Config
+│       └── global.css               # Tailwind @import & DaisyUI @plugin
+├── astro.config.mjs                 # Vite PWA & Tailwind Config
+├── APRS_TX_README.md                # Detailed APRS-TX Documentation
+├── IMPLEMENTATION_SUMMARY.md        # Implementation Details
 └── package.json

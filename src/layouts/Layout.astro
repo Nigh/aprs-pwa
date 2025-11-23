@@ -5,7 +5,7 @@ import ReloadPrompt from "../components/ReloadPrompt.svelte"
 import "../styles/global.css"
 
 interface Props {
-	title: string
+    title: string
 }
 
 const { title } = Astro.props
@@ -13,18 +13,19 @@ const { title } = Astro.props
 
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="description" content="Astro description" />
-		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="generator" content={Astro.generator} />
-		<title>{title}</title>
-		<ClientRouter />
-		{pwaInfo && <Fragment set:html={pwaInfo.webManifest.linkTag} />}
-	</head>
-	<body>
-		<slot />
-		<ReloadPrompt client:load />
-	</body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="description" content="APRS-TX Transmitter PWA" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#3b82f6" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <meta name="generator" content={Astro.generator} />
+        <title>{title}</title>
+        <ClientRouter />
+        {pwaInfo && <Fragment set:html={pwaInfo.webManifest.linkTag} />}
+    </head>
+    <body style="margin: 0; padding: 0; overflow-x: hidden;">
+        <slot />
+        <ReloadPrompt client:load />
+    </body>
 </html>
