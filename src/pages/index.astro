@@ -1,23 +1,18 @@
 ---
 import Layout from "../layouts/Layout.astro"
-import Counter from "../components/Counter.svelte"
+import APRSTransmitter from "../components/APRSTransmitter.svelte"
 ---
 
-<Layout title="Astro PWA Template">
-	<main
-		class="flex min-h-screen flex-col items-center justify-center bg-base-200 p-4"
-	>
-		<div class="avatar hover:scale-110">
-			<a href="https://github.com/Nigh/astro-pwa-template" target="_blank">
-			<div class="w-30 mb-6 rounded-full border-4 border-primary overflow-hidden">
-				<img
-					class="scale-120"
-					src="favicon.svg"
-				/>
-			</div>
-			</a>
-		</div>
-		<h1 class="text-4xl font-bold mb-8 text-primary">Astro PWA Template</h1>
-		<Counter client:load />
-	</main>
+<Layout title="APRS-TX Transmitter">
+    <main
+        class="flex min-h-screen flex-col items-center justify-center bg-base-200 p-4"
+    >
+        <div class="w-full max-w-2xl">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold mb-2 text-primary">APRS-TX</h1>
+                <p class="text-lg text-base-content opacity-70">Automatic Packet Reporting System Transmitter</p>
+            </div>
+            <APRSTransmitter client:load />
+        </div>
+    </main>
 </Layout>
