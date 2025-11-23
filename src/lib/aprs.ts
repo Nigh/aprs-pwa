@@ -71,28 +71,33 @@ function formatLongitude(lon: number): string {
   return `${dStr}${mStr}${dir}`;
 }
 
-export async function getGPSLocation(): Promise<APRSLocation> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by this browser'));
-      return;
-    }
-    
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude ?? undefined,
-          timestamp: Date.now(),
-        });
-      },
-      (error) => {
-        reject(new Error(`Geolocation error: ${error.message}`));
+export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLocation> {
+  return Promise.race([
+    new Promise<APRSLocation>((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by this browser'));
+        return;
       }
-    );
-  });
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude ?? undefined,
+            timestamp: Date.now(),
+          });
+        },
+        (error) => {
+          reject(new Error(`Geolocation error: ${error.message}`));
+        }
+      );
+    }),
+    new Promise<APRSLocation>((_, reject) =>
+      setTimeout(() => reject(new Error('GPS location timeout')), timeoutMs)
+    ),
+  ]);
 }
 
 export function isGPSLocationStale(location: APRSLocation | null, maxAgeMs: number = 60000): boolean {

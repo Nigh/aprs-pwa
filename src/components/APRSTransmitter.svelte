@@ -23,6 +23,9 @@
   let location: APRSLocation | null = null;
   let scheduledTransmissions: Map<number, NodeJS.Timeout> = new Map();
   let scheduledCallsigns: Set<string> = new Set();
+  let lastScheduledTransmissionTime: number = 0;
+  let countdownProgress: number = 0;
+  let countdownSeconds: number = 0;
 
   $: isSchedulingActive = scheduledCallsigns.size > 0;
 
@@ -52,8 +55,15 @@
       if (!currentLocation || isGPSLocationStale(currentLocation)) {
         showInfo('Acquiring GPS location...');
         logToHistory('Acquiring GPS location for transmission', 'info');
-        currentLocation = await getGPSLocation();
-        location = currentLocation;
+        try {
+          currentLocation = await getGPSLocation();
+          location = currentLocation;
+        } catch (gpsError) {
+          const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
+          showError(msg);
+          logToHistory(msg, 'error');
+          return;
+        }
       }
 
       const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
@@ -86,18 +96,44 @@
 
     isScheduling = true;
     scheduledCallsigns.add(callsign);
+    lastScheduledTransmissionTime = Date.now();
+    countdownProgress = 0;
+    countdownSeconds = scheduleInterval;
 
     const executeScheduledTransmission = async () => {
+      const now = Date.now();
+      const timeSinceLastTransmission = now - lastScheduledTransmissionTime;
+      const minimumIntervalMs = scheduleInterval * 1000;
+
+      // Schedule guard: check if enough time has actually passed
+      if (timeSinceLastTransmission < minimumIntervalMs * 0.95) {
+        console.warn('Skipping transmission: not enough time elapsed (page may have been backgrounded)');
+        return;
+      }
+
       try {
         let currentLocation = location;
         
         if (!currentLocation || isGPSLocationStale(currentLocation)) {
-          currentLocation = await getGPSLocation();
-          location = currentLocation;
+          try {
+            currentLocation = await getGPSLocation();
+            location = currentLocation;
+          } catch (gpsError) {
+            const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
+            showError(msg);
+            logToHistory(msg, 'error');
+            return;
+          }
         }
         
-        const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
+        // Get fresh value of additionalText each transmission
+        const currentAdditionalText = additionalText;
+        const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, currentAdditionalText);
         const result = await transmitAPRSPacket(packet, callsign, passcode);
+        
+        lastScheduledTransmissionTime = Date.now();
+        countdownProgress = 0;
+        countdownSeconds = scheduleInterval;
         
         if (result.success) {
           showSuccess(result.message);
@@ -126,10 +162,17 @@
     // Execute immediately
     await executeScheduledTransmission();
 
-    // Schedule subsequent transmissions
+    // Schedule subsequent transmissions with countdown tracking
     const intervalMs = scheduleInterval * 1000;
-    const timeoutId = window.setInterval(executeScheduledTransmission, intervalMs);
-    scheduledTransmissions.set(Date.now(), timeoutId);
+    const countdownIntervalId = window.setInterval(() => {
+      countdownSeconds--;
+      if (countdownSeconds < 0) countdownSeconds = scheduleInterval;
+      countdownProgress = 100 - (countdownSeconds / scheduleInterval) * 100;
+    }, 1000);
+
+    const transmissionIntervalId = window.setInterval(executeScheduledTransmission, intervalMs);
+    scheduledTransmissions.set(Date.now(), transmissionIntervalId);
+    scheduledTransmissions.set(Date.now() + 1, countdownIntervalId);
   };
 
   const handleStopSchedule = async () => {
@@ -220,7 +263,6 @@
         class="input input-bordered input-sm w-full"
         bind:value={additionalText}
         on:change={(e) => updateSetting('additionalText', additionalText)}
-        disabled={isSchedulingActive}
         maxlength="50"
       />
     </label>
@@ -287,12 +329,18 @@
           ▶ Start
         </button>
       {:else}
-        <button
-          class="btn btn-error btn-sm flex-1"
-          on:click={handleStopSchedule}
-        >
-          ⏹ Stop
-        </button>
+        <div class="relative flex-1">
+          <button
+            class="btn btn-error btn-sm w-full relative overflow-hidden"
+            on:click={handleStopSchedule}
+          >
+            <div
+              class="absolute inset-0 bg-error opacity-50 transition-all"
+              style="width: {countdownProgress}%"
+            ></div>
+            <span class="relative z-10">⏹ Stop ({countdownSeconds}s)</span>
+          </button>
+        </div>
       {/if}
     </div>
 
