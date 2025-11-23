@@ -13,6 +13,7 @@
   import { loadSettings, updateSetting } from '../lib/storage';
   import { showSuccess, showError, showInfo, showWarning, logToHistory } from '../lib/toast';
 
+  const base = import.meta.env.PUBLIC_BASE_URL;
   let callsign = '';
   let passcode = '';
   let commentText = '';
@@ -223,7 +224,7 @@
   <div class="card-body gap-1 p-4">
     <div class="flex justify-between items-center mb-2">
       <h2 class="card-title text-xl">APRS-TX</h2>
-      <a href="/logs" class="btn btn-ghost btn-xs">📋 Logs</a>
+      <a href={base + "logs/"} class="btn btn-ghost btn-xs">📋 Logs</a>
     </div>
 
     <div class="grid grid-cols-2 gap-2 mb-2">
