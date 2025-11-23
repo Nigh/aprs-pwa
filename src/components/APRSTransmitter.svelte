@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import {
-    generateAPRSPacket,
+    generateAPRSPackets,
     getGPSLocation,
     validateAPRSCallsign,
-    transmitAPRSPacket,
+    transmitAPRSPackets,
     isGPSLocationStale,
     acquireWakeLock,
     releaseWakeLock,
@@ -15,7 +15,8 @@
 
   let callsign = '';
   let passcode = '';
-  let additionalText = '';
+  let commentText = '';
+  let statuText = '';
   let scheduleInterval = 60;
   let isLoading = false;
   let location: APRSLocation | null = null;
@@ -65,8 +66,8 @@
         }
       }
 
-      const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
-      const result = await transmitAPRSPacket(packet, callsign, passcode);
+      const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, commentText, statuText);
+      const result = await transmitAPRSPackets(packets, callsign, passcode);
       
       if (result.success) {
         showSuccess(result.message);
@@ -126,10 +127,11 @@
           }
         }
         
-        // Get fresh value of additionalText each transmission
-        const currentAdditionalText = additionalText;
-        const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, currentAdditionalText);
-        const result = await transmitAPRSPacket(packet, callsign, passcode);
+        // Get fresh value of commentText each transmission
+        const currentCommentText = commentText;
+		const currentStatuText = statuText;
+        const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, currentCommentText, currentStatuText);
+        const result = await transmitAPRSPackets(packets, callsign, passcode);
         
         countdownProgress = 0;
         countdownSeconds = scheduleInterval;
@@ -204,7 +206,8 @@
     const settings = loadSettings();
     if (settings.callsign) callsign = settings.callsign;
     if (settings.passcode) passcode = settings.passcode;
-    if (settings.additionalText) additionalText = settings.additionalText;
+    if (settings.commentText) commentText = settings.commentText;
+	if (settings.statuText) statuText = settings.statuText;
     if (settings.scheduleInterval) scheduleInterval = settings.scheduleInterval;
   });
 
@@ -216,8 +219,8 @@
   });
 </script>
 
-<div class="card w-full bg-base-100 shadow-xl border border-base-300">
-  <div class="card-body gap-3 p-4">
+<div class="card gap-2 w-full bg-base-100 shadow-xl border border-base-300">
+  <div class="card-body gap-1 p-4">
     <div class="flex justify-between items-center mb-2">
       <h2 class="card-title text-xl">APRS-TX</h2>
       <a href="/logs" class="btn btn-ghost btn-xs">📋 Logs</a>
@@ -253,18 +256,32 @@
         />
       </label>
     </div>
-
-    <label class="form-control mb-2">
+    <div class="divider my-1"></div>
+    <label class="form-control">
       <div class="label py-1">
-        <span class="label-text text-sm">Text (optional)</span>
+        <span class="label-text text-sm">Comment (optional)</span>
       </div>
       <input
         type="text"
-        placeholder="Beacon text"
+        placeholder="comment text"
         class="input input-bordered input-sm w-full"
-        bind:value={additionalText}
-        on:change={(e) => updateSetting('additionalText', additionalText)}
-        maxlength="50"
+        bind:value={commentText}
+        on:change={(e) => updateSetting('commentText', commentText)}
+        maxlength="140"
+      />
+    </label>
+
+    <label class="form-control mb-2">
+      <div class="label py-1">
+        <span class="label-text text-sm">Status (optional)</span>
+      </div>
+      <input
+        type="text"
+        placeholder="status text"
+        class="input input-bordered input-sm w-full"
+        bind:value={statuText}
+        on:change={(e) => updateSetting('statuText', statuText)}
+        maxlength="140"
       />
     </label>
 
@@ -341,7 +358,7 @@
               class="absolute inset-0 bg-error transition-all"
               style="width: {countdownProgress}%"
             ></div>
-            <span class="relative z-10">⏹ Stop ({countdownSeconds}s)</span>
+            <span class="relative z-10 text-primary-content">⏹ Stop ({countdownSeconds}s)</span>
           </button>
         </div>
       {/if}

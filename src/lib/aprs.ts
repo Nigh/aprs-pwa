@@ -1,7 +1,8 @@
 export interface APRSConfig {
   callsign: string;
   passcode: string;
-  additionalText?: string;
+  commentText?: string;
+  statuText?: string;
 }
 
 export interface APRSLocation {
@@ -19,15 +20,13 @@ export interface APRSTransmissionResult {
   callsign?: string;
 }
 
-const APRS_SERVER = 'rotate.aprs.net';
-const APRS_PORT = 14580;
-
-export function generateAPRSPacket(
+export function generateAPRSPackets(
   callsign: string,
   latitude: number,
   longitude: number,
-  additionalText?: string
-): string {
+  commentText?: string,
+  statuText?: string
+): string[] {
   const cleanCallsign = callsign.toUpperCase();
   
   // Format latitude and longitude in APRS format
@@ -35,16 +34,18 @@ export function generateAPRSPacket(
   const lon = formatLongitude(longitude);
   
   // Build the APRS packet
-  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[additionaltext
-  let packet = `${cleanCallsign}>APRS,TCPIP*:!${lat}/${lon}[`;
-  
-  if (additionalText) {
-    packet += `${additionalText}`;
+  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText
+  // Format: CALLSIGN>APRS,TCPIP*:>statuText
+  const head = `${cleanCallsign}>APRS,TCPIP*:`;
+  let packets = []
+  packets.push(`${head}!${lat}/${lon}[`);
+  if (commentText) {
+	packets[0] += `${commentText}`;
   }
-  
-  packet += `\r\n`;
-  
-  return packet;
+  if (statuText) {
+	packets.push(`${head}>${statuText}`);
+  }
+  return packets;
 }
 
 function formatLatitude(lat: number): string {
@@ -143,8 +144,8 @@ export async function validateAPRSCallsign(callsign: string, passcode: string): 
   return true;
 }
 
-export async function transmitAPRSPacket(
-  packet: string,
+export async function transmitAPRSPackets(
+  packets: string[],
   callsign: string,
   passcode: string
 ): Promise<APRSTransmissionResult> {
@@ -157,7 +158,7 @@ export async function transmitAPRSPacket(
       body: JSON.stringify({
         callsign: callsign,
         passcode: passcode,
-        packet: packet,
+        packets: packets,
       }),
     });
 
