@@ -95,8 +95,7 @@ This application is based on the **Astro PWA Template** - a production-ready sta
 ├── src/
 │   ├── components/
 │   │   ├── APRSTransmitter.svelte   # APRS-TX Main Component
-│   │   ├── ReloadPrompt.svelte      # PWA Update Toast
-│   │   └── Counter.svelte           # Example Svelte Component
+│   │   └── ReloadPrompt.svelte      # PWA Update Toast
 │   ├── layouts/
 │   │   └── Layout.astro             # Contains <ClientRouter> & PWA Logic
 │   ├── lib/
