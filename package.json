@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@vite-pwa/astro": "^1.1.1",
+    "astro-icon": "^1.1.5",
     "workbox-window": "^7.4.0"
   }
 }
