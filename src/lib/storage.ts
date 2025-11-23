@@ -1,7 +1,8 @@
 export interface StoredSettings {
   callsign?: string;
   passcode?: string;
-  additionalText?: string;
+  commentText?: string;
+  statuText?: string;
   scheduleInterval?: number;
 }
 

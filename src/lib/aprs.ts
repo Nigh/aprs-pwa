@@ -1,7 +1,8 @@
 export interface APRSConfig {
   callsign: string;
   passcode: string;
-  additionalText?: string;
+  commentText?: string;
+  statuText?: string;
 }
 
 export interface APRSLocation {
@@ -19,15 +20,13 @@ export interface APRSTransmissionResult {
   callsign?: string;
 }
 
-const APRS_SERVER = 'rotate.aprs.net';
-const APRS_PORT = 14580;
-
-export function generateAPRSPacket(
+export function generateAPRSPackets(
   callsign: string,
   latitude: number,
   longitude: number,
-  additionalText?: string
-): string {
+  commentText?: string,
+  statuText?: string
+): string[] {
   const cleanCallsign = callsign.toUpperCase();
   
   // Format latitude and longitude in APRS format
@@ -35,16 +34,18 @@ export function generateAPRSPacket(
   const lon = formatLongitude(longitude);
   
   // Build the APRS packet
-  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[additionaltext
-  let packet = `${cleanCallsign}>APRS,TCPIP*:!${lat}/${lon}[`;
-  
-  if (additionalText) {
-    packet += `${additionalText}`;
+  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText
+  // Format: CALLSIGN>APRS,TCPIP*:>statuText
+  const head = `${cleanCallsign}>APRS,TCPIP*:`;
+  let packets = []
+  packets.push(`${head}!${lat}/${lon}[`);
+  if (commentText) {
+	packets[0] += `${commentText}`;
   }
-  
-  packet += `\r\n`;
-  
-  return packet;
+  if (statuText) {
+	packets.push(`${head}>${statuText}`);
+  }
+  return packets;
 }
 
 function formatLatitude(lat: number): string {
@@ -71,28 +72,33 @@ function formatLongitude(lon: number): string {
   return `${dStr}${mStr}${dir}`;
 }
 
-export async function getGPSLocation(): Promise<APRSLocation> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by this browser'));
-      return;
-    }
-    
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude ?? undefined,
-          timestamp: Date.now(),
-        });
-      },
-      (error) => {
-        reject(new Error(`Geolocation error: ${error.message}`));
+export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLocation> {
+  return Promise.race([
+    new Promise<APRSLocation>((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by this browser'));
+        return;
       }
-    );
-  });
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude ?? undefined,
+            timestamp: Date.now(),
+          });
+        },
+        (error) => {
+          reject(new Error(`Geolocation error: ${error.message}`));
+        }
+      );
+    }),
+    new Promise<APRSLocation>((_, reject) =>
+      setTimeout(() => reject(new Error('GPS location timeout')), timeoutMs)
+    ),
+  ]);
 }
 
 export function isGPSLocationStale(location: APRSLocation | null, maxAgeMs: number = 60000): boolean {
@@ -138,8 +144,8 @@ export async function validateAPRSCallsign(callsign: string, passcode: string): 
   return true;
 }
 
-export async function transmitAPRSPacket(
-  packet: string,
+export async function transmitAPRSPackets(
+  packets: string[],
   callsign: string,
   passcode: string
 ): Promise<APRSTransmissionResult> {
@@ -152,7 +158,7 @@ export async function transmitAPRSPacket(
       body: JSON.stringify({
         callsign: callsign,
         passcode: passcode,
-        packet: packet,
+        packets: packets,
       }),
     });
 

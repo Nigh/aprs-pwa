@@ -1,14 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import {
-    generateAPRSPacket,
+    generateAPRSPackets,
     getGPSLocation,
     validateAPRSCallsign,
-    transmitAPRSPacket,
+    transmitAPRSPackets,
     isGPSLocationStale,
     acquireWakeLock,
     releaseWakeLock,
-    type APRSTransmissionResult,
     type APRSLocation
   } from '../lib/aprs';
   import { loadSettings, updateSetting } from '../lib/storage';
@@ -16,15 +15,19 @@
 
   let callsign = '';
   let passcode = '';
-  let additionalText = '';
+  let commentText = '';
+  let statuText = '';
   let scheduleInterval = 60;
   let isLoading = false;
-  let isScheduling = false;
   let location: APRSLocation | null = null;
-  let scheduledTransmissions: Map<number, NodeJS.Timeout> = new Map();
+  let scheduledTransmissions: Map<string, NodeJS.Timeout> = new Map();
+  let isSchedulingActive = false;
+  let lastScheduledTransmissionTime: number = 0;
+  let countdownProgress: number = 0;
+  let countdownSeconds: number = 0;
   let scheduledCallsigns: Set<string> = new Set();
-
-  $: isSchedulingActive = scheduledCallsigns.size > 0;
+  let transmissionIntervalId: NodeJS.Timeout | null = null;
+  let countdownIntervalId: NodeJS.Timeout | null = null;
 
   const handleGetLocation = async () => {
     isLoading = true;
@@ -52,16 +55,24 @@
       if (!currentLocation || isGPSLocationStale(currentLocation)) {
         showInfo('Acquiring GPS location...');
         logToHistory('Acquiring GPS location for transmission', 'info');
-        currentLocation = await getGPSLocation();
-        location = currentLocation;
+        try {
+          currentLocation = await getGPSLocation();
+          location = currentLocation;
+        } catch (gpsError) {
+          const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
+          showError(msg);
+          logToHistory(msg, 'error');
+          return;
+        }
       }
 
-      const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
-      const result = await transmitAPRSPacket(packet, callsign, passcode);
+      const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, commentText, statuText);
+      const result = await transmitAPRSPackets(packets, callsign, passcode);
       
       if (result.success) {
         showSuccess(result.message);
         logToHistory(result.message, 'success');
+		lastScheduledTransmissionTime = Date.now();
       } else {
         showError(result.message);
         logToHistory(result.message, 'error');
@@ -84,24 +95,51 @@
       return;
     }
 
-    isScheduling = true;
     scheduledCallsigns.add(callsign);
+    scheduledCallsigns = scheduledCallsigns;
+    isSchedulingActive = true;
+    countdownProgress = 0;
+    countdownSeconds = scheduleInterval;
 
     const executeScheduledTransmission = async () => {
+      const now = Date.now();
+      const timeSinceLastTransmission = now - lastScheduledTransmissionTime;
+      const minimumIntervalMs = scheduleInterval * 1000;
+
+      // Schedule guard: check if enough time has actually passed
+      if (timeSinceLastTransmission < minimumIntervalMs * 0.95) {
+        console.warn('Skipping transmission: not enough time elapsed (page may have been backgrounded)');
+        return;
+      }
+
       try {
         let currentLocation = location;
         
         if (!currentLocation || isGPSLocationStale(currentLocation)) {
-          currentLocation = await getGPSLocation();
-          location = currentLocation;
+          try {
+            currentLocation = await getGPSLocation();
+            location = currentLocation;
+          } catch (gpsError) {
+            const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
+            showError(msg);
+            logToHistory(msg, 'error');
+            return;
+          }
         }
         
-        const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
-        const result = await transmitAPRSPacket(packet, callsign, passcode);
+        // Get fresh value of commentText each transmission
+        const currentCommentText = commentText;
+		const currentStatuText = statuText;
+        const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, currentCommentText, currentStatuText);
+        const result = await transmitAPRSPackets(packets, callsign, passcode);
+        
+        countdownProgress = 0;
+        countdownSeconds = scheduleInterval;
         
         if (result.success) {
           showSuccess(result.message);
           logToHistory(result.message, 'success');
+          lastScheduledTransmissionTime = Date.now();
         } else {
           showError(result.message);
           logToHistory(result.message, 'error');
@@ -126,10 +164,17 @@
     // Execute immediately
     await executeScheduledTransmission();
 
-    // Schedule subsequent transmissions
+    // Schedule subsequent transmissions with countdown tracking
     const intervalMs = scheduleInterval * 1000;
-    const timeoutId = window.setInterval(executeScheduledTransmission, intervalMs);
-    scheduledTransmissions.set(Date.now(), timeoutId);
+    const countdownIntervalId = window.setInterval(() => {
+      countdownSeconds--;
+      if (countdownSeconds < 0) countdownSeconds = scheduleInterval;
+      countdownProgress = 100 - (countdownSeconds / scheduleInterval) * 100;
+    }, 1000);
+
+    const transmissionIntervalId = window.setInterval(executeScheduledTransmission, intervalMs);
+    scheduledTransmissions.set('transmission', transmissionIntervalId);
+    scheduledTransmissions.set('countdown', countdownIntervalId);
   };
 
   const handleStopSchedule = async () => {
@@ -138,7 +183,8 @@
     });
     scheduledTransmissions.clear();
     scheduledCallsigns.delete(callsign);
-    isScheduling = false;
+    scheduledCallsigns = scheduledCallsigns;
+    isSchedulingActive = false;
 
     await releaseWakeLock();
 
@@ -160,7 +206,8 @@
     const settings = loadSettings();
     if (settings.callsign) callsign = settings.callsign;
     if (settings.passcode) passcode = settings.passcode;
-    if (settings.additionalText) additionalText = settings.additionalText;
+    if (settings.commentText) commentText = settings.commentText;
+	if (settings.statuText) statuText = settings.statuText;
     if (settings.scheduleInterval) scheduleInterval = settings.scheduleInterval;
   });
 
@@ -172,8 +219,8 @@
   });
 </script>
 
-<div class="card w-full bg-base-100 shadow-xl border border-base-300">
-  <div class="card-body gap-3 p-4">
+<div class="card gap-2 w-full bg-base-100 shadow-xl border border-base-300">
+  <div class="card-body gap-1 p-4">
     <div class="flex justify-between items-center mb-2">
       <h2 class="card-title text-xl">APRS-TX</h2>
       <a href="/logs" class="btn btn-ghost btn-xs">📋 Logs</a>
@@ -209,19 +256,32 @@
         />
       </label>
     </div>
-
-    <label class="form-control mb-2">
+    <div class="divider my-1"></div>
+    <label class="form-control">
       <div class="label py-1">
-        <span class="label-text text-sm">Text (optional)</span>
+        <span class="label-text text-sm">Comment (optional)</span>
       </div>
       <input
         type="text"
-        placeholder="Beacon text"
+        placeholder="comment text"
         class="input input-bordered input-sm w-full"
-        bind:value={additionalText}
-        on:change={(e) => updateSetting('additionalText', additionalText)}
-        disabled={isSchedulingActive}
-        maxlength="50"
+        bind:value={commentText}
+        on:change={(e) => updateSetting('commentText', commentText)}
+        maxlength="140"
+      />
+    </label>
+
+    <label class="form-control mb-2">
+      <div class="label py-1">
+        <span class="label-text text-sm">Status (optional)</span>
+      </div>
+      <input
+        type="text"
+        placeholder="status text"
+        class="input input-bordered input-sm w-full"
+        bind:value={statuText}
+        on:change={(e) => updateSetting('statuText', statuText)}
+        maxlength="140"
       />
     </label>
 
@@ -234,8 +294,9 @@
       </div>
     {/if}
 
+	<div class="flex gap-2">
     <button
-      class="btn btn-outline btn-sm w-full"
+      class="btn btn-outline btn-sm flex-1"
       on:click={handleGetLocation}
       disabled={isLoading || isSchedulingActive}
     >
@@ -247,7 +308,7 @@
     </button>
 
     <button
-      class="btn btn-primary btn-sm w-full"
+      class="btn btn-primary btn-sm flex-3"
       on:click={handleManualTransmit}
       disabled={isLoading || isSchedulingActive}
     >
@@ -257,12 +318,13 @@
         📤 Send
       {/if}
     </button>
+	</div>
 
     <div class="divider my-1"></div>
 
     <label class="form-control mb-2">
       <div class="label py-1">
-        <span class="label-text text-sm">Interval (sec, min 30)</span>
+        <span class="label-text text-sm">Interval (sec [>=30])</span>
       </div>
       <input
         type="number"
@@ -287,12 +349,18 @@
           ▶ Start
         </button>
       {:else}
-        <button
-          class="btn btn-error btn-sm flex-1"
-          on:click={handleStopSchedule}
-        >
-          ⏹ Stop
-        </button>
+        <div class="relative flex-1">
+          <button
+            class="btn btn-error btn-outline btn-sm w-full relative overflow-hidden"
+            on:click={handleStopSchedule}
+          >
+            <div
+              class="absolute inset-0 bg-error transition-all"
+              style="width: {countdownProgress}%"
+            ></div>
+            <span class="relative z-10 text-primary-content">⏹ Stop ({countdownSeconds}s)</span>
+          </button>
+        </div>
       {/if}
     </div>
 
