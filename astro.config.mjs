@@ -5,8 +5,12 @@ import tailwindcss from '@tailwindcss/vite';
 import AstroPWA from '@vite-pwa/astro';
 import icon from "astro-icon";
 
+const BASE_PATH = process.env.PUBLIC_BASE_URL || '/';
+const SITE_URL = process.env.PUBLIC_SITE_URL || 'http://localhost:4321';
+
 export default defineConfig({
-  base: '/aprs-pwa/',
+  base: BASE_PATH,
+  site: SITE_URL,
   integrations: [
     icon(),
     svelte(),

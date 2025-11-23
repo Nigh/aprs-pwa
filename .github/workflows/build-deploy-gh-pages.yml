@@ -24,6 +24,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Install, build, and upload your site
         uses: withastro/action@v3
+        env:
+          PUBLIC_BASE_URL: '/aprs-pwa'
+          PUBLIC_SITE_URL: 'https://nigh.github.io'
 
   deploy:
     needs: build
