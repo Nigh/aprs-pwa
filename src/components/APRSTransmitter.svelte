@@ -71,6 +71,7 @@
       if (result.success) {
         showSuccess(result.message);
         logToHistory(result.message, 'success');
+		lastScheduledTransmissionTime = Date.now();
       } else {
         showError(result.message);
         logToHistory(result.message, 'error');
@@ -96,7 +97,6 @@
     scheduledCallsigns.add(callsign);
     scheduledCallsigns = scheduledCallsigns;
     isSchedulingActive = true;
-    lastScheduledTransmissionTime = Date.now();
     countdownProgress = 0;
     countdownSeconds = scheduleInterval;
 
@@ -131,13 +131,13 @@
         const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, currentAdditionalText);
         const result = await transmitAPRSPacket(packet, callsign, passcode);
         
-        lastScheduledTransmissionTime = Date.now();
         countdownProgress = 0;
         countdownSeconds = scheduleInterval;
         
         if (result.success) {
           showSuccess(result.message);
           logToHistory(result.message, 'success');
+          lastScheduledTransmissionTime = Date.now();
         } else {
           showError(result.message);
           logToHistory(result.message, 'error');
