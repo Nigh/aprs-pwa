@@ -33,7 +33,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/404',
+        navigateFallback: '/',
         globPatterns: ['**/*.{css,js,html,svg,png,ico,txt}'],
       },
       devOptions: {

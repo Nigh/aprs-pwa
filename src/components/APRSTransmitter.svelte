@@ -24,6 +24,7 @@
   let lastScheduledTransmissionTime: number = 0;
   let countdownProgress: number = 0;
   let countdownSeconds: number = 0;
+  let scheduledCallsigns: Set<string> = new Set();
   let transmissionIntervalId: NodeJS.Timeout | null = null;
   let countdownIntervalId: NodeJS.Timeout | null = null;
 
@@ -276,8 +277,9 @@
       </div>
     {/if}
 
+	<div class="flex gap-2">
     <button
-      class="btn btn-outline btn-sm w-full"
+      class="btn btn-outline btn-sm flex-1"
       on:click={handleGetLocation}
       disabled={isLoading || isSchedulingActive}
     >
@@ -289,7 +291,7 @@
     </button>
 
     <button
-      class="btn btn-primary btn-sm w-full"
+      class="btn btn-primary btn-sm flex-3"
       on:click={handleManualTransmit}
       disabled={isLoading || isSchedulingActive}
     >
@@ -299,12 +301,13 @@
         📤 Send
       {/if}
     </button>
+	</div>
 
     <div class="divider my-1"></div>
 
     <label class="form-control mb-2">
       <div class="label py-1">
-        <span class="label-text text-sm">Interval (sec, min 30)</span>
+        <span class="label-text text-sm">Interval (sec [>=30])</span>
       </div>
       <input
         type="number"
@@ -331,11 +334,11 @@
       {:else}
         <div class="relative flex-1">
           <button
-            class="btn btn-error btn-sm w-full relative overflow-hidden"
+            class="btn btn-error btn-outline btn-sm w-full relative overflow-hidden"
             on:click={handleStopSchedule}
           >
             <div
-              class="absolute inset-0 bg-error opacity-50 transition-all"
+              class="absolute inset-0 bg-error transition-all"
               style="width: {countdownProgress}%"
             ></div>
             <span class="relative z-10">⏹ Stop ({countdownSeconds}s)</span>
