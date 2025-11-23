@@ -63,6 +63,34 @@ This application is based on the **Astro PWA Template** - a production-ready sta
 | `npm run preview` | Preview your build locally |
 | `npm run astro ...` | Run CLI commands like `astro add` |
 
+## 🚀 GitHub Pages Deployment
+
+This project is configured to automatically build and deploy to GitHub Pages using GitHub Actions.
+
+### Workflow
+
+The `.github/workflows/build-deploy-gh-pages.yml` workflow:
+- Triggers on push to `main` or `dev` branches
+- Runs on pull requests for validation
+- Builds the Astro PWA application with `npm run build`
+- Deploys the `dist/` folder to GitHub Pages
+
+### Configuration
+
+- **Base path:** Set to `/aprs-pwa/` in `astro.config.mjs` for project site deployment
+- **Deployment URL:** `https://nigh.github.io/aprs-pwa/`
+- **Auto-deployment:** Enabled for `main` and `dev` branches
+
+### Enable GitHub Pages
+
+1. Go to your repository settings
+2. Navigate to **Pages** section
+3. Select **Deploy from a branch** as the source
+4. Choose `gh-pages` branch (created automatically by the workflow)
+5. Click **Save**
+
+The workflow will handle building and deploying automatically on each push!
+
 ## ✅ Develop Tips
 
 > [!TIP]
