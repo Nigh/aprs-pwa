@@ -101,8 +101,6 @@ This application is based on the **Astro PWA Template** - a production-ready sta
 │   ├── lib/
 │   │   └── aprs.ts                  # APRS Utility Functions
 │   ├── pages/
-│   │   ├── api/
-│   │   │   └── aprs-transmit.ts     # Backend API Endpoint
 │   │   └── index.astro              # Main APRS-TX Application
 │   └── styles/
 │       └── global.css               # Tailwind @import & DaisyUI @plugin
