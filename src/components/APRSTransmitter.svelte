@@ -8,7 +8,6 @@
     isGPSLocationStale,
     acquireWakeLock,
     releaseWakeLock,
-    type APRSTransmissionResult,
     type APRSLocation
   } from '../lib/aprs';
   import { loadSettings, updateSetting } from '../lib/storage';
@@ -19,15 +18,14 @@
   let additionalText = '';
   let scheduleInterval = 60;
   let isLoading = false;
-  let isScheduling = false;
   let location: APRSLocation | null = null;
-  let scheduledTransmissions: Map<number, NodeJS.Timeout> = new Map();
-  let scheduledCallsigns: Set<string> = new Set();
+  let scheduledTransmissions: Map<string, NodeJS.Timeout> = new Map();
+  let isSchedulingActive = false;
   let lastScheduledTransmissionTime: number = 0;
   let countdownProgress: number = 0;
   let countdownSeconds: number = 0;
-
-  $: isSchedulingActive = scheduledCallsigns.size > 0;
+  let transmissionIntervalId: NodeJS.Timeout | null = null;
+  let countdownIntervalId: NodeJS.Timeout | null = null;
 
   const handleGetLocation = async () => {
     isLoading = true;
@@ -94,8 +92,9 @@
       return;
     }
 
-    isScheduling = true;
     scheduledCallsigns.add(callsign);
+    scheduledCallsigns = scheduledCallsigns;
+    isSchedulingActive = true;
     lastScheduledTransmissionTime = Date.now();
     countdownProgress = 0;
     countdownSeconds = scheduleInterval;
@@ -171,8 +170,8 @@
     }, 1000);
 
     const transmissionIntervalId = window.setInterval(executeScheduledTransmission, intervalMs);
-    scheduledTransmissions.set(Date.now(), transmissionIntervalId);
-    scheduledTransmissions.set(Date.now() + 1, countdownIntervalId);
+    scheduledTransmissions.set('transmission', transmissionIntervalId);
+    scheduledTransmissions.set('countdown', countdownIntervalId);
   };
 
   const handleStopSchedule = async () => {
@@ -181,7 +180,8 @@
     });
     scheduledTransmissions.clear();
     scheduledCallsigns.delete(callsign);
-    isScheduling = false;
+    scheduledCallsigns = scheduledCallsigns;
+    isSchedulingActive = false;
 
     await releaseWakeLock();
 
