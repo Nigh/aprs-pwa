@@ -144,7 +144,7 @@ export async function transmitAPRSPacket(
   passcode: string
 ): Promise<APRSTransmissionResult> {
   try {
-    const response = await fetch('https://aprs-proxy.jiyucheng007.workers.dev/', {
+    const response = await fetch('https://aprs-api.tecnico.cc/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
