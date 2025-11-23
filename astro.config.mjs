@@ -6,8 +6,9 @@ import AstroPWA from '@vite-pwa/astro';
 import icon from "astro-icon";
 
 export default defineConfig({
+  base: '/aprs-pwa/',
   integrations: [
-	icon(),
+    icon(),
     svelte(),
     AstroPWA({
       registerType: 'autoUpdate',
