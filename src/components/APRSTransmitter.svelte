@@ -5,9 +5,14 @@
     getGPSLocation,
     validateAPRSCallsign,
     transmitAPRSPacket,
+    isGPSLocationStale,
+    acquireWakeLock,
+    releaseWakeLock,
     type APRSTransmissionResult,
     type APRSLocation
   } from '../lib/aprs';
+  import { loadSettings, updateSetting } from '../lib/storage';
+  import { showSuccess, showError, showInfo, showWarning, logToHistory } from '../lib/toast';
 
   let callsign = '';
   let passcode = '';
@@ -16,7 +21,6 @@
   let isLoading = false;
   let isScheduling = false;
   let location: APRSLocation | null = null;
-  let lastResult: APRSTransmissionResult | null = null;
   let scheduledTransmissions: Map<number, NodeJS.Timeout> = new Map();
   let scheduledCallsigns: Set<string> = new Set();
 
@@ -26,19 +30,13 @@
     isLoading = true;
     try {
       location = await getGPSLocation();
-      lastResult = {
-        success: true,
-        message: `GPS location retrieved: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`,
-        timestamp: new Date(),
-        callsign: callsign,
-      };
+      const msg = `GPS location retrieved: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`;
+      showSuccess(msg);
+      logToHistory(msg, 'success');
     } catch (error) {
-      lastResult = {
-        success: false,
-        message: `Failed to get GPS location: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        timestamp: new Date(),
-        callsign: callsign,
-      };
+      const msg = `Failed to get GPS location: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      showError(msg);
+      logToHistory(msg, 'error');
     } finally {
       isLoading = false;
     }
@@ -46,28 +44,32 @@
 
   const handleManualTransmit = async () => {
     if (!(await validateInput())) return;
-    if (!location) {
-      lastResult = {
-        success: false,
-        message: 'Please get GPS location first',
-        timestamp: new Date(),
-        callsign: callsign,
-      };
-      return;
-    }
-
+    
     isLoading = true;
     try {
-      const packet = generateAPRSPacket(callsign, location.latitude, location.longitude, additionalText);
+      let currentLocation = location;
+      
+      if (!currentLocation || isGPSLocationStale(currentLocation)) {
+        showInfo('Acquiring GPS location...');
+        logToHistory('Acquiring GPS location for transmission', 'info');
+        currentLocation = await getGPSLocation();
+        location = currentLocation;
+      }
+
+      const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
       const result = await transmitAPRSPacket(packet, callsign, passcode);
-      lastResult = result;
+      
+      if (result.success) {
+        showSuccess(result.message);
+        logToHistory(result.message, 'success');
+      } else {
+        showError(result.message);
+        logToHistory(result.message, 'error');
+      }
     } catch (error) {
-      lastResult = {
-        success: false,
-        message: `Transmission failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        timestamp: new Date(),
-        callsign: callsign,
-      };
+      const msg = `Transmission failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      showError(msg);
+      logToHistory(msg, 'error');
     } finally {
       isLoading = false;
     }
@@ -75,23 +77,10 @@
 
   const handleStartSchedule = async () => {
     if (!(await validateInput())) return;
-    if (!location) {
-      lastResult = {
-        success: false,
-        message: 'Please get GPS location first',
-        timestamp: new Date(),
-        callsign: callsign,
-      };
-      return;
-    }
 
     if (scheduleInterval < 30) {
-      lastResult = {
-        success: false,
-        message: 'Minimum interval is 30 seconds',
-        timestamp: new Date(),
-        callsign: callsign,
-      };
+      showError('Minimum interval is 30 seconds');
+      logToHistory('Invalid schedule interval', 'error');
       return;
     }
 
@@ -100,18 +89,39 @@
 
     const executeScheduledTransmission = async () => {
       try {
-        const packet = generateAPRSPacket(callsign, location!.latitude, location!.longitude, additionalText);
+        let currentLocation = location;
+        
+        if (!currentLocation || isGPSLocationStale(currentLocation)) {
+          currentLocation = await getGPSLocation();
+          location = currentLocation;
+        }
+        
+        const packet = generateAPRSPacket(callsign, currentLocation.latitude, currentLocation.longitude, additionalText);
         const result = await transmitAPRSPacket(packet, callsign, passcode);
-        lastResult = result;
+        
+        if (result.success) {
+          showSuccess(result.message);
+          logToHistory(result.message, 'success');
+        } else {
+          showError(result.message);
+          logToHistory(result.message, 'error');
+        }
       } catch (error) {
-        lastResult = {
-          success: false,
-          message: `Scheduled transmission failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          timestamp: new Date(),
-          callsign: callsign,
-        };
+        const msg = `Scheduled transmission failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        showError(msg);
+        logToHistory(msg, 'error');
       }
     };
+
+    try {
+      await acquireWakeLock();
+      const msg = `Scheduled transmissions started for ${callsign}. Sending every ${scheduleInterval} seconds.`;
+      showSuccess(msg);
+      logToHistory(msg, 'success');
+    } catch (error) {
+      showWarning('Wake Lock acquisition failed (device may sleep)');
+      logToHistory('Wake Lock not available', 'warning');
+    }
 
     // Execute immediately
     await executeScheduledTransmission();
@@ -122,7 +132,7 @@
     scheduledTransmissions.set(Date.now(), timeoutId);
   };
 
-  const handleStopSchedule = () => {
+  const handleStopSchedule = async () => {
     scheduledTransmissions.forEach((timeoutId) => {
       clearInterval(timeoutId);
     });
@@ -130,224 +140,165 @@
     scheduledCallsigns.delete(callsign);
     isScheduling = false;
 
-    lastResult = {
-      success: true,
-      message: `Scheduled transmissions stopped for ${callsign}`,
-      timestamp: new Date(),
-      callsign: callsign,
-    };
+    await releaseWakeLock();
+
+    const msg = `Scheduled transmissions stopped for ${callsign}`;
+    showSuccess(msg);
+    logToHistory(msg, 'success');
   };
 
   const validateInput = async (): Promise<boolean> => {
     const isValid = await validateAPRSCallsign(callsign, passcode);
     if (!isValid) {
-      lastResult = {
-        success: false,
-        message: 'Please enter both CALLSIGN and PASSCODE',
-        timestamp: new Date(),
-        callsign: callsign,
-      };
+      showError('Please enter both CALLSIGN and PASSCODE');
+      logToHistory('Validation failed: missing callsign or passcode', 'error');
     }
     return isValid;
   };
 
-  onDestroy(() => {
+  onMount(() => {
+    const settings = loadSettings();
+    if (settings.callsign) callsign = settings.callsign;
+    if (settings.passcode) passcode = settings.passcode;
+    if (settings.additionalText) additionalText = settings.additionalText;
+    if (settings.scheduleInterval) scheduleInterval = settings.scheduleInterval;
+  });
+
+  onDestroy(async () => {
     scheduledTransmissions.forEach((timeoutId) => {
       clearInterval(timeoutId);
     });
+    await releaseWakeLock();
   });
 </script>
 
-<div class="card w-full max-w-2xl bg-base-100 shadow-xl border border-base-300">
-  <div class="card-body">
-    <h2 class="card-title text-2xl mb-6">APRS-TX Transmitter</h2>
+<div class="card w-full bg-base-100 shadow-xl border border-base-300">
+  <div class="card-body gap-3 p-4">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="card-title text-xl">APRS-TX</h2>
+      <a href="/logs" class="btn btn-ghost btn-xs">📋 Logs</a>
+    </div>
 
-    <!-- Callsign and Passcode Section -->
-    <div class="space-y-4 mb-6">
-      <label class="form-control w-full">
-        <div class="label">
-          <span class="label-text">Callsign *</span>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <label class="form-control">
+        <div class="label py-1">
+          <span class="label-text text-sm">Callsign *</span>
         </div>
         <input
           type="text"
           placeholder="N0CALL-1"
-          class="input input-bordered w-full"
+          class="input input-bordered input-sm w-full"
           bind:value={callsign}
+          on:change={(e) => updateSetting('callsign', callsign)}
           disabled={isSchedulingActive}
           maxlength="9"
         />
       </label>
 
-      <label class="form-control w-full">
-        <div class="label">
-          <span class="label-text">Passcode *</span>
+      <label class="form-control">
+        <div class="label py-1">
+          <span class="label-text text-sm">Passcode *</span>
         </div>
         <input
           type="password"
-          placeholder="Enter APRS passcode"
-          class="input input-bordered w-full"
+          placeholder="Code"
+          class="input input-bordered input-sm w-full"
           bind:value={passcode}
+          on:change={(e) => updateSetting('passcode', passcode)}
           disabled={isSchedulingActive}
-        />
-      </label>
-
-      <label class="form-control w-full">
-        <div class="label">
-          <span class="label-text">Additional Text (optional)</span>
-        </div>
-        <input
-          type="text"
-          placeholder="Additional beacon text"
-          class="input input-bordered w-full"
-          bind:value={additionalText}
-          disabled={isSchedulingActive}
-          maxlength="50"
         />
       </label>
     </div>
 
-    <!-- GPS Section -->
-    <div class="divider">GPS</div>
-    <div class="space-y-4 mb-6">
-      {#if location}
-        <div class="alert alert-info">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="h-6 w-6 stroke-current shrink-0"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <div>
-            <p class="font-semibold">Location: {location.latitude.toFixed(4)}°, {location.longitude.toFixed(4)}°</p>
-            <p class="text-sm">Accuracy: ±{location.accuracy?.toFixed(1) ?? 'N/A'} meters</p>
-          </div>
-        </div>
-      {/if}
-
-      <button
-        class="btn btn-outline w-full"
-        on:click={handleGetLocation}
-        disabled={isLoading || isSchedulingActive}
-      >
-        {#if isLoading}
-          <span class="loading loading-spinner"></span>
-        {:else}
-          📍 Get GPS Location
-        {/if}
-      </button>
-    </div>
-
-    <!-- Transmission Section -->
-    <div class="divider">Transmission</div>
-    <div class="space-y-4 mb-6">
-      <button
-        class="btn btn-primary w-full"
-        on:click={handleManualTransmit}
-        disabled={isLoading || isSchedulingActive}
-      >
-        {#if isLoading}
-          <span class="loading loading-spinner"></span>
-        {:else}
-          📤 Send Packet
-        {/if}
-      </button>
-    </div>
-
-    <!-- Scheduling Section -->
-    <div class="divider">Automatic Transmission</div>
-    <div class="space-y-4 mb-6">
-      <label class="form-control w-full">
-        <div class="label">
-          <span class="label-text">Interval (seconds, min 30)</span>
-        </div>
-        <input
-          type="number"
-          min="30"
-          max="3600"
-          step="1"
-          placeholder="60"
-          class="input input-bordered w-full"
-          bind:value={scheduleInterval}
-          disabled={isSchedulingActive}
-        />
-      </label>
-
-      <div class="flex gap-2">
-        {#if !isSchedulingActive}
-          <button
-            class="btn btn-success flex-1"
-            on:click={handleStartSchedule}
-            disabled={isLoading}
-          >
-            ▶ Start Schedule
-          </button>
-        {:else}
-          <button
-            class="btn btn-error flex-1"
-            on:click={handleStopSchedule}
-          >
-            ⏹ Stop Schedule
-          </button>
-        {/if}
+    <label class="form-control mb-2">
+      <div class="label py-1">
+        <span class="label-text text-sm">Text (optional)</span>
       </div>
+      <input
+        type="text"
+        placeholder="Beacon text"
+        class="input input-bordered input-sm w-full"
+        bind:value={additionalText}
+        on:change={(e) => updateSetting('additionalText', additionalText)}
+        disabled={isSchedulingActive}
+        maxlength="50"
+      />
+    </label>
 
-      {#if isSchedulingActive}
-        <div class="alert alert-warning">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="h-6 w-6 stroke-current shrink-0"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4v2m0 4v2M12 3a9 9 0 110 18 9 9 0 010-18z"
-            />
-          </svg>
-          <span>Scheduled transmissions active. Sending every {scheduleInterval} seconds.</span>
+    {#if location}
+      <div class="alert alert-info alert-sm py-2 px-3 mb-2">
+        <div class="text-xs">
+          <p class="font-semibold">📍 {location.latitude.toFixed(4)}°, {location.longitude.toFixed(4)}°</p>
+          <p class="opacity-75">±{location.accuracy?.toFixed(1) ?? 'N/A'}m</p>
         </div>
+      </div>
+    {/if}
+
+    <button
+      class="btn btn-outline btn-sm w-full"
+      on:click={handleGetLocation}
+      disabled={isLoading || isSchedulingActive}
+    >
+      {#if isLoading}
+        <span class="loading loading-spinner loading-xs"></span>
+      {:else}
+        📍 GPS
+      {/if}
+    </button>
+
+    <button
+      class="btn btn-primary btn-sm w-full"
+      on:click={handleManualTransmit}
+      disabled={isLoading || isSchedulingActive}
+    >
+      {#if isLoading}
+        <span class="loading loading-spinner loading-xs"></span>
+      {:else}
+        📤 Send
+      {/if}
+    </button>
+
+    <div class="divider my-1"></div>
+
+    <label class="form-control mb-2">
+      <div class="label py-1">
+        <span class="label-text text-sm">Interval (sec, min 30)</span>
+      </div>
+      <input
+        type="number"
+        min="30"
+        max="3600"
+        step="1"
+        placeholder="60"
+        class="input input-bordered input-sm w-full"
+        bind:value={scheduleInterval}
+        on:change={(e) => updateSetting('scheduleInterval', scheduleInterval)}
+        disabled={isSchedulingActive}
+      />
+    </label>
+
+    <div class="flex gap-2">
+      {#if !isSchedulingActive}
+        <button
+          class="btn btn-success btn-sm flex-1"
+          on:click={handleStartSchedule}
+          disabled={isLoading}
+        >
+          ▶ Start
+        </button>
+      {:else}
+        <button
+          class="btn btn-error btn-sm flex-1"
+          on:click={handleStopSchedule}
+        >
+          ⏹ Stop
+        </button>
       {/if}
     </div>
 
-    <!-- Results Section -->
-    {#if lastResult}
-      <div class="divider">Status</div>
-      <div class={`alert ${lastResult.success ? 'alert-success' : 'alert-error'} mb-4`}>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          class="h-6 w-6 stroke-current shrink-0"
-        >
-          {#if lastResult.success}
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          {:else}
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 14l-2-2m0 0l-2-2m2 2l2-2m-2 2l-2 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          {/if}
-        </svg>
-        <div>
-          <span class="font-semibold">{lastResult.message}</span>
-          <p class="text-xs opacity-70">{lastResult.timestamp.toLocaleTimeString()}</p>
-        </div>
+    {#if isSchedulingActive}
+      <div class="alert alert-warning alert-sm py-2 px-3">
+        <span class="text-xs">Sending every {scheduleInterval}s, GPS auto-acquired</span>
       </div>
     {/if}
   </div>

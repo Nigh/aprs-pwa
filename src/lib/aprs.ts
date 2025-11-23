@@ -9,6 +9,7 @@ export interface APRSLocation {
   longitude: number;
   accuracy?: number;
   altitude?: number;
+  timestamp?: number;
 }
 
 export interface APRSTransmissionResult {
@@ -84,6 +85,7 @@ export async function getGPSLocation(): Promise<APRSLocation> {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           altitude: position.coords.altitude ?? undefined,
+          timestamp: Date.now(),
         });
       },
       (error) => {
@@ -91,6 +93,37 @@ export async function getGPSLocation(): Promise<APRSLocation> {
       }
     );
   });
+}
+
+export function isGPSLocationStale(location: APRSLocation | null, maxAgeMs: number = 60000): boolean {
+  if (!location || !location.timestamp) return true;
+  return Date.now() - location.timestamp > maxAgeMs;
+}
+
+let wakeLock: any = null;
+
+export async function acquireWakeLock(): Promise<void> {
+  if (!('wakeLock' in navigator)) {
+    console.warn('Wake Lock API not supported');
+    return;
+  }
+  
+  try {
+    wakeLock = await (navigator as any).wakeLock.request('screen');
+  } catch (error) {
+    console.warn('Failed to acquire wake lock:', error);
+  }
+}
+
+export async function releaseWakeLock(): Promise<void> {
+  if (wakeLock !== null) {
+    try {
+      await wakeLock.release();
+      wakeLock = null;
+    } catch (error) {
+      console.warn('Failed to release wake lock:', error);
+    }
+  }
 }
 
 export async function validateAPRSCallsign(callsign: string, passcode: string): Promise<boolean> {
