@@ -1,16 +1,16 @@
 ---
 import Layout from "../layouts/Layout.astro"
 import APRSTransmitter from "../components/APRSTransmitter.svelte"
+import Toast from "../components/Toast.svelte"
 ---
 
 <Layout title="APRS-TX Transmitter">
-    <main
-        class="flex min-h-screen flex-col items-center justify-center bg-base-200 p-4"
-    >
-        <div class="w-full max-w-2xl">
-            <div class="text-center mb-8">
-                <h1 class="text-4xl font-bold mb-2 text-primary">APRS-TX</h1>
-                <p class="text-lg text-base-content opacity-70">Automatic Packet Reporting System Transmitter</p>
+    <Toast client:only="svelte" />
+    <main class="flex flex-col items-center justify-center min-h-screen bg-base-200 p-2">
+        <div class="w-full max-w-sm">
+            <div class="text-center mb-3">
+                <h1 class="text-3xl font-bold text-primary">APRS-TX</h1>
+                <p class="text-sm text-base-content opacity-70">Packet Reporting System</p>
             </div>
             <APRSTransmitter client:load />
         </div>
