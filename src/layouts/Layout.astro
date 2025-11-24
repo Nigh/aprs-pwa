@@ -7,7 +7,7 @@ import "../styles/global.css"
 interface Props {
     title: string
 }
-const base = import.meta.env.PUBLIC_BASE_URL;
+import { base } from '../env.ts'
 
 const { title } = Astro.props
 ---

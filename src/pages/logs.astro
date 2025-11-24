@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro"
 import LogsViewer from "../components/LogsViewer.svelte"
 
-const base = import.meta.env.PUBLIC_BASE_URL;
+import { base } from '../env.ts'
 ---
 
 <Layout title="APRS-TX Logs">

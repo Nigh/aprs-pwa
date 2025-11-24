@@ -1,5 +1,7 @@
 # APRS-TX Transmitter (Automatic Packet Reporting System)
 
+<img width="320" alt="image" src="https://github.com/user-attachments/assets/09565b98-1097-4e59-a0ec-a6719df8a19c" />
+
 A Progressive Web Application for amateur radio operators to transmit their GPS location and messages via the APRS network. Built with **Astro 5**, **Svelte 5**, **Tailwind CSS v4**, and **DaisyUI**.
 
 This application is based on the **Astro PWA Template** - a production-ready starter for building PWAs with Astro, Svelte, Tailwind CSS v4, and DaisyUI.
@@ -58,7 +60,7 @@ This application is based on the **Astro PWA Template** - a production-ready sta
 
 | Command | Action |
 | :--- | :--- |
-| `npm run dev` | Starts local dev server at `localhost:4321` |
+| `npm run dev` | Starts local dev server at `localhost:4421` |
 | `npm run build` | Build your production site to `./dist/` |
 | `npm run preview` | Preview your build locally |
 | `npm run astro ...` | Run CLI commands like `astro add` |
@@ -104,9 +106,9 @@ The workflow will handle building and deploying automatically on each push!
 > The `Reload` prompt usually does not show up in npm run dev mode because the service worker behavior is different in development.
 >    * you should build the project by: `npm run build`
 >    * Then preview the build: `npm run preview`
->    * Open the preview URL (usually `localhost:4321`) in your browser.
+>    * Open the preview URL (usually `localhost:4421`) in your browser.
 >    * Go to your code and make a small visible change, then run `npm run build` again.
->    * Go back to the `localhost:4321` page and refresh manually once.
+>    * Go back to the `localhost:4421` page and refresh manually once.
 >    * The Service Worker will detect the new hash in the background, and the Toast should pop up asking you to "Reload" to apply the new version.
 
 

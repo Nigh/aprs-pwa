@@ -12,8 +12,7 @@
   } from '../lib/aprs';
   import { loadSettings, updateSetting } from '../lib/storage';
   import { showSuccess, showError, showInfo, showWarning, logToHistory } from '../lib/toast';
-
-  const base = import.meta.env.PUBLIC_BASE_URL;
+  import { base } from '../env.ts'
   let callsign = '';
   let passcode = '';
   let commentText = '';
