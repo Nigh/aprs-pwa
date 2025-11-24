@@ -1,5 +1,7 @@
 # APRS-TX Transmitter (Automatic Packet Reporting System)
 
+<img width="320" alt="image" src="https://github.com/user-attachments/assets/09565b98-1097-4e59-a0ec-a6719df8a19c" />
+
 A Progressive Web Application for amateur radio operators to transmit their GPS location and messages via the APRS network. Built with **Astro 5**, **Svelte 5**, **Tailwind CSS v4**, and **DaisyUI**.
 
 This application is based on the **Astro PWA Template** - a production-ready starter for building PWAs with Astro, Svelte, Tailwind CSS v4, and DaisyUI.
