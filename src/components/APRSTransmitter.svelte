@@ -289,7 +289,7 @@
       <div class="alert alert-info alert-sm py-2 px-3 mb-2">
         <div class="text-xs">
           <p class="font-semibold">📍 {location.latitude.toFixed(4)}°, {location.longitude.toFixed(4)}°</p>
-          <p class="opacity-75">±{location.accuracy?.toFixed(1) ?? 'N/A'}m{location.speed !== undefined && location.speed !== null ? ` • ${(location.speed * 1.94384).toFixed(1)} kt` : ''}</p>
+          <p class="opacity-75">±{location.accuracy?.toFixed(1) ?? 'N/A'}m{location.speed !== undefined && location.speed !== null ? ` • ${(location.speed * 3.6).toFixed(1)} km/h` : ''}</p>
         </div>
       </div>
     {/if}
