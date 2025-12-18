@@ -32,7 +32,9 @@
   const handleGetLocation = async () => {
     isLoading = true;
     try {
-      location = await getGPSLocation();
+      const newLocation = await getGPSLocation(20000, location);
+      location = newLocation;
+      updateSetting('lastGPSLocation', location);
       const msg = `GPS location retrieved: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`;
       showSuccess(msg);
       logToHistory(msg, 'success');
@@ -56,8 +58,9 @@
         showInfo('Acquiring GPS location...');
         logToHistory('Acquiring GPS location for transmission', 'info');
         try {
-          currentLocation = await getGPSLocation();
+          currentLocation = await getGPSLocation(20000, location);
           location = currentLocation;
+          updateSetting('lastGPSLocation', location);
         } catch (gpsError) {
           const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
           showError(msg);
@@ -117,8 +120,9 @@
         
         if (!currentLocation || isGPSLocationStale(currentLocation)) {
           try {
-            currentLocation = await getGPSLocation();
+            currentLocation = await getGPSLocation(20000, location);
             location = currentLocation;
+            updateSetting('lastGPSLocation', location);
           } catch (gpsError) {
             const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
             showError(msg);
@@ -209,6 +213,7 @@
     if (settings.commentText) commentText = settings.commentText;
     if (settings.statuText) statuText = settings.statuText;
     if (settings.scheduleInterval) scheduleInterval = settings.scheduleInterval;
+    if (settings.lastGPSLocation) location = settings.lastGPSLocation;
   });
 
   onDestroy(async () => {

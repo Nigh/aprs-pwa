@@ -1,9 +1,12 @@
+import type { APRSLocation } from './aprs';
+
 export interface StoredSettings {
   callsign?: string;
   passcode?: string;
   commentText?: string;
   statuText?: string;
   scheduleInterval?: number;
+  lastGPSLocation?: APRSLocation;
 }
 
 const STORAGE_KEY = 'aprs-settings';

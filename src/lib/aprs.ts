@@ -90,7 +90,71 @@ function formatSpeed(speedMps?: number): string | null {
   return String(speedKnots).padStart(3, '0');
 }
 
-export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLocation> {
+/**
+ * Calculate distance between two GPS coordinates using Haversine formula
+ * @param lat1 First latitude in degrees
+ * @param lon1 First longitude in degrees
+ * @param lat2 Second latitude in degrees
+ * @param lon2 Second longitude in degrees
+ * @returns Distance in meters
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+/**
+ * Calculate average speed based on two GPS positions
+ * @param previousLocation Previous GPS location
+ * @param currentLocation Current GPS location
+ * @returns Average speed in m/s, or null if calculation not possible
+ */
+export function calculateAverageSpeed(previousLocation: APRSLocation, currentLocation: APRSLocation): number | null {
+  if (!previousLocation.timestamp || !currentLocation.timestamp) {
+    return null;
+  }
+
+  const timeDifferenceMs = currentLocation.timestamp - previousLocation.timestamp;
+  
+  // Only calculate if previous position is less than 5 minutes old
+  if (timeDifferenceMs > 300000) { // 5 minutes = 300000ms
+    return null;
+  }
+
+  // Don't calculate if time difference is too small (less than 1 second)
+  if (timeDifferenceMs < 1000) {
+    return null;
+  }
+
+  const distance = calculateDistance(
+    previousLocation.latitude,
+    previousLocation.longitude,
+    currentLocation.latitude,
+    currentLocation.longitude
+  );
+
+  const timeDifferenceSeconds = timeDifferenceMs / 1000;
+  const averageSpeed = distance / timeDifferenceSeconds;
+
+  // Return null if calculated speed is unrealistic (e.g., > 200 m/s or ~720 km/h)
+  if (averageSpeed > 200) {
+    return null;
+  }
+
+  return averageSpeed;
+}
+
+export async function getGPSLocation(timeoutMs: number = 17000, previousLocation?: APRSLocation | null): Promise<APRSLocation> {
   return Promise.race([
     new Promise<APRSLocation>((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -100,14 +164,24 @@ export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLoc
       
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          resolve({
+          const currentLocation: APRSLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
             altitude: position.coords.altitude ?? undefined,
             speed: position.coords.speed ?? undefined,
             timestamp: Date.now(),
-          });
+          };
+
+          // If GPS doesn't provide speed, try to calculate average speed from previous position
+          if ((currentLocation.speed === null || currentLocation.speed === undefined) && previousLocation) {
+            const calculatedSpeed = calculateAverageSpeed(previousLocation, currentLocation);
+            if (calculatedSpeed !== null) {
+              currentLocation.speed = calculatedSpeed;
+            }
+          }
+
+          resolve(currentLocation);
         },
         (error) => {
           reject(new Error(`Geolocation error: ${error.message}`));
