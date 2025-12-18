@@ -11,6 +11,7 @@ export interface APRSLocation {
   accuracy?: number;
   altitude?: number;
   timestamp?: number;
+  speed?: number;
 }
 
 export interface APRSTransmissionResult {
@@ -25,7 +26,8 @@ export function generateAPRSPackets(
   latitude: number,
   longitude: number,
   commentText?: string,
-  statuText?: string
+  statuText?: string,
+  speed?: number
 ): string[] {
   const cleanCallsign = callsign.toUpperCase();
   
@@ -34,16 +36,23 @@ export function generateAPRSPackets(
   const lon = formatLongitude(longitude);
   
   // Build the APRS packet
-  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText
+  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText (or with speed: !LAT/LON/SPEED[commentText)
   // Format: CALLSIGN>APRS,TCPIP*:>statuText
   const head = `${cleanCallsign}>APRS,TCPIP*:`;
   let packets = []
-  packets.push(`${head}!${lat}/${lon}[`);
+  const formattedSpeed = formatSpeed(speed);
+  
+  if (formattedSpeed) {
+    packets.push(`${head}!${lat}/${lon}/${formattedSpeed}[`);
+  } else {
+    packets.push(`${head}!${lat}/${lon}[`);
+  }
+  
   if (commentText) {
-	packets[0] += `${commentText}`;
+    packets[0] += `${commentText}`;
   }
   if (statuText) {
-	packets.push(`${head}>${statuText}`);
+    packets.push(`${head}>${statuText}`);
   }
   return packets;
 }
@@ -72,6 +81,15 @@ function formatLongitude(lon: number): string {
   return `${dStr}${mStr}${dir}`;
 }
 
+function formatSpeed(speedMps?: number): string | null {
+  if (speedMps === undefined || speedMps === null || speedMps < 0) {
+    return null;
+  }
+  
+  const speedKnots = Math.round(speedMps * 1.94384);
+  return String(speedKnots).padStart(3, '0');
+}
+
 export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLocation> {
   return Promise.race([
     new Promise<APRSLocation>((resolve, reject) => {
@@ -87,6 +105,7 @@ export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLoc
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
             altitude: position.coords.altitude ?? undefined,
+            speed: position.coords.speed ?? undefined,
             timestamp: Date.now(),
           });
         },
