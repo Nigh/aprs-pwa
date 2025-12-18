@@ -66,13 +66,13 @@
         }
       }
 
-      const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, commentText, statuText);
+      const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, commentText, statuText, currentLocation.speed);
       const result = await transmitAPRSPackets(packets, callsign, passcode);
       
       if (result.success) {
         showSuccess(result.message);
         logToHistory(result.message, 'success');
-		lastScheduledTransmissionTime = Date.now();
+        lastScheduledTransmissionTime = Date.now();
       } else {
         showError(result.message);
         logToHistory(result.message, 'error');
@@ -129,8 +129,8 @@
         
         // Get fresh value of commentText each transmission
         const currentCommentText = commentText;
-		const currentStatuText = statuText;
-        const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, currentCommentText, currentStatuText);
+        const currentStatuText = statuText;
+        const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, currentCommentText, currentStatuText, currentLocation.speed);
         const result = await transmitAPRSPackets(packets, callsign, passcode);
         
         countdownProgress = 0;
@@ -207,7 +207,7 @@
     if (settings.callsign) callsign = settings.callsign;
     if (settings.passcode) passcode = settings.passcode;
     if (settings.commentText) commentText = settings.commentText;
-	if (settings.statuText) statuText = settings.statuText;
+    if (settings.statuText) statuText = settings.statuText;
     if (settings.scheduleInterval) scheduleInterval = settings.scheduleInterval;
   });
 
@@ -289,12 +289,12 @@
       <div class="alert alert-info alert-sm py-2 px-3 mb-2">
         <div class="text-xs">
           <p class="font-semibold">📍 {location.latitude.toFixed(4)}°, {location.longitude.toFixed(4)}°</p>
-          <p class="opacity-75">±{location.accuracy?.toFixed(1) ?? 'N/A'}m</p>
+          <p class="opacity-75">±{location.accuracy?.toFixed(1) ?? 'N/A'}m{location.speed !== undefined && location.speed !== null ? ` • ${(location.speed * 3.6).toFixed(1)} km/h` : ''}</p>
         </div>
       </div>
     {/if}
 
-	<div class="flex gap-2">
+    <div class="flex gap-2">
     <button
       class="btn btn-outline btn-sm flex-1"
       on:click={handleGetLocation}
@@ -318,7 +318,7 @@
         📤 Send
       {/if}
     </button>
-	</div>
+    </div>
 
     <div class="divider my-1"></div>
 
