@@ -4,6 +4,8 @@ export interface StoredSettings {
   callsign?: string;
   passcode?: string;
   commentText?: string;
+  statusText?: string;
+  /** @deprecated kept for backward compatibility */
   statuText?: string;
   scheduleInterval?: number;
   lastGPSLocation?: APRSLocation;
@@ -16,7 +18,16 @@ export function loadSettings(): StoredSettings {
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
+    if (!stored) return {};
+
+    const parsed = JSON.parse(stored) as StoredSettings;
+    if (parsed.statuText && !parsed.statusText) {
+      parsed.statusText = parsed.statuText;
+      delete parsed.statuText;
+      saveSettings(parsed);
+    }
+
+    return parsed;
   } catch {
     return {};
   }

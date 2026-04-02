@@ -11,7 +11,7 @@
   }
 
   function clearLogs() {
-    recentLogs.set([]);
+    recentLogs.clear();
   }
 </script>
 

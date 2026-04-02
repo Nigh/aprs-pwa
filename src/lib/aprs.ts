@@ -2,7 +2,7 @@ export interface APRSConfig {
   callsign: string;
   passcode: string;
   commentText?: string;
-  statuText?: string;
+  statusText?: string;
 }
 
 export interface APRSLocation {
@@ -26,7 +26,7 @@ export function generateAPRSPackets(
   latitude: number,
   longitude: number,
   commentText?: string,
-  statuText?: string,
+  statusText?: string,
   speed?: number
 ): string[] {
   const cleanCallsign = callsign.toUpperCase();
@@ -37,7 +37,7 @@ export function generateAPRSPackets(
   
   // Build the APRS packet
   // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText (or with speed: !LAT/LON/SPEED[commentText)
-  // Format: CALLSIGN>APRS,TCPIP*:>statuText
+  // Format: CALLSIGN>APRS,TCPIP*:>statusText
   const head = `${cleanCallsign}>APRS,TCPIP*:`;
   let packets = []
   const formattedSpeed = formatSpeed(speed);
@@ -51,8 +51,8 @@ export function generateAPRSPackets(
   if (commentText) {
     packets[0] += `${commentText}`;
   }
-  if (statuText) {
-    packets.push(`${head}>${statuText}`);
+  if (statusText) {
+    packets.push(`${head}>${statusText}`);
   }
   return packets;
 }
@@ -225,16 +225,40 @@ export async function releaseWakeLock(): Promise<void> {
   }
 }
 
-export async function validateAPRSCallsign(callsign: string, passcode: string): Promise<boolean> {
-  if (!callsign || callsign.trim().length === 0) {
-    return false;
+export interface ValidationResult {
+  valid: boolean;
+  message?: string;
+}
+
+export function validateAPRSCallsign(callsign: string, passcode: string): ValidationResult {
+  const normalizedCallsign = callsign.trim().toUpperCase();
+  const normalizedPasscode = passcode.trim();
+
+  if (!normalizedCallsign) {
+    return { valid: false, message: 'Please enter a CALLSIGN' };
   }
-  
-  if (!passcode || passcode.trim().length === 0) {
-    return false;
+
+  if (!/^[A-Z0-9]{1,6}(-[0-9]{1,2})?$/.test(normalizedCallsign)) {
+    return { valid: false, message: 'CALLSIGN format is invalid (example: N0CALL-1)' };
   }
-  
-  return true;
+
+  const ssid = normalizedCallsign.split('-')[1];
+  if (ssid) {
+    const ssidValue = Number(ssid);
+    if (!Number.isInteger(ssidValue) || ssidValue < 0 || ssidValue > 15) {
+      return { valid: false, message: 'CALLSIGN SSID must be between 0 and 15' };
+    }
+  }
+
+  if (!normalizedPasscode) {
+    return { valid: false, message: 'Please enter a PASSCODE' };
+  }
+
+  if (!/^-?\d{1,5}$/.test(normalizedPasscode)) {
+    return { valid: false, message: 'PASSCODE format is invalid' };
+  }
+
+  return { valid: true };
 }
 
 export async function transmitAPRSPackets(
