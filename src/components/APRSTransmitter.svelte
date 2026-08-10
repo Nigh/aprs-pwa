@@ -16,23 +16,88 @@
   let callsign = '';
   let passcode = '';
   let commentText = '';
-  let statuText = '';
+  let statusText = '';
   let scheduleInterval = 60;
   let isLoading = false;
   let location: APRSLocation | null = null;
-  let scheduledTransmissions: Map<string, NodeJS.Timeout> = new Map();
   let isSchedulingActive = false;
   let lastScheduledTransmissionTime: number = 0;
   let countdownProgress: number = 0;
   let countdownSeconds: number = 0;
-  let scheduledCallsigns: Set<string> = new Set();
-  let transmissionIntervalId: NodeJS.Timeout | null = null;
-  let countdownIntervalId: NodeJS.Timeout | null = null;
+  let transmissionIntervalId: ReturnType<typeof window.setInterval> | null = null;
+  let countdownIntervalId: ReturnType<typeof window.setInterval> | null = null;
+
+  const clearScheduleTimers = () => {
+    if (transmissionIntervalId !== null) {
+      clearInterval(transmissionIntervalId);
+      transmissionIntervalId = null;
+    }
+
+    if (countdownIntervalId !== null) {
+      clearInterval(countdownIntervalId);
+      countdownIntervalId = null;
+    }
+  };
+
+  const ensureFreshLocation = async (reason: string): Promise<APRSLocation | null> => {
+    let currentLocation = location;
+
+    if (!currentLocation || isGPSLocationStale(currentLocation)) {
+      showInfo('Acquiring GPS location...');
+      logToHistory(`Acquiring GPS location for ${reason}`, 'info');
+
+      try {
+        currentLocation = await getGPSLocation(20000, location);
+        location = currentLocation;
+        updateSetting('lastGPSLocation', location);
+      } catch (gpsError) {
+        const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
+        showError(msg);
+        logToHistory(msg, 'error');
+        return null;
+      }
+    }
+
+    return currentLocation;
+  };
+
+  const transmitCurrentPacket = async (reason: 'manual' | 'scheduled') => {
+    const currentLocation = await ensureFreshLocation(reason === 'manual' ? 'transmission' : 'scheduled transmission');
+    if (!currentLocation) return;
+
+    const packets = generateAPRSPackets(
+      callsign,
+      currentLocation.latitude,
+      currentLocation.longitude,
+      commentText,
+      statusText,
+      currentLocation.speed
+    );
+
+    const result = await transmitAPRSPackets(packets, callsign, passcode);
+
+    if (reason === 'scheduled') {
+      countdownProgress = 0;
+      countdownSeconds = scheduleInterval;
+    }
+
+    if (result.success) {
+      showSuccess(result.message);
+      logToHistory(result.message, 'success');
+      lastScheduledTransmissionTime = Date.now();
+      return;
+    }
+
+    showError(result.message);
+    logToHistory(result.message, 'error');
+  };
 
   const handleGetLocation = async () => {
     isLoading = true;
     try {
-      location = await getGPSLocation();
+      const newLocation = await getGPSLocation(20000, location);
+      location = newLocation;
+      updateSetting('lastGPSLocation', location);
       const msg = `GPS location retrieved: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`;
       showSuccess(msg);
       logToHistory(msg, 'success');
@@ -50,33 +115,7 @@
     
     isLoading = true;
     try {
-      let currentLocation = location;
-      
-      if (!currentLocation || isGPSLocationStale(currentLocation)) {
-        showInfo('Acquiring GPS location...');
-        logToHistory('Acquiring GPS location for transmission', 'info');
-        try {
-          currentLocation = await getGPSLocation();
-          location = currentLocation;
-        } catch (gpsError) {
-          const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
-          showError(msg);
-          logToHistory(msg, 'error');
-          return;
-        }
-      }
-
-      const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, commentText, statuText, currentLocation.speed);
-      const result = await transmitAPRSPackets(packets, callsign, passcode);
-      
-      if (result.success) {
-        showSuccess(result.message);
-        logToHistory(result.message, 'success');
-        lastScheduledTransmissionTime = Date.now();
-      } else {
-        showError(result.message);
-        logToHistory(result.message, 'error');
-      }
+      await transmitCurrentPacket('manual');
     } catch (error) {
       const msg = `Transmission failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
       showError(msg);
@@ -95,8 +134,7 @@
       return;
     }
 
-    scheduledCallsigns.add(callsign);
-    scheduledCallsigns = scheduledCallsigns;
+    clearScheduleTimers();
     isSchedulingActive = true;
     countdownProgress = 0;
     countdownSeconds = scheduleInterval;
@@ -113,37 +151,7 @@
       }
 
       try {
-        let currentLocation = location;
-        
-        if (!currentLocation || isGPSLocationStale(currentLocation)) {
-          try {
-            currentLocation = await getGPSLocation();
-            location = currentLocation;
-          } catch (gpsError) {
-            const msg = `GPS acquisition failed: ${gpsError instanceof Error ? gpsError.message : 'Unknown error'}`;
-            showError(msg);
-            logToHistory(msg, 'error');
-            return;
-          }
-        }
-        
-        // Get fresh value of commentText each transmission
-        const currentCommentText = commentText;
-        const currentStatuText = statuText;
-        const packets = generateAPRSPackets(callsign, currentLocation.latitude, currentLocation.longitude, currentCommentText, currentStatuText, currentLocation.speed);
-        const result = await transmitAPRSPackets(packets, callsign, passcode);
-        
-        countdownProgress = 0;
-        countdownSeconds = scheduleInterval;
-        
-        if (result.success) {
-          showSuccess(result.message);
-          logToHistory(result.message, 'success');
-          lastScheduledTransmissionTime = Date.now();
-        } else {
-          showError(result.message);
-          logToHistory(result.message, 'error');
-        }
+        await transmitCurrentPacket('scheduled');
       } catch (error) {
         const msg = `Scheduled transmission failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
         showError(msg);
@@ -166,25 +174,20 @@
 
     // Schedule subsequent transmissions with countdown tracking
     const intervalMs = scheduleInterval * 1000;
-    const countdownIntervalId = window.setInterval(() => {
+    countdownIntervalId = window.setInterval(() => {
       countdownSeconds--;
       if (countdownSeconds < 0) countdownSeconds = scheduleInterval;
       countdownProgress = 100 - (countdownSeconds / scheduleInterval) * 100;
     }, 1000);
 
-    const transmissionIntervalId = window.setInterval(executeScheduledTransmission, intervalMs);
-    scheduledTransmissions.set('transmission', transmissionIntervalId);
-    scheduledTransmissions.set('countdown', countdownIntervalId);
+    transmissionIntervalId = window.setInterval(executeScheduledTransmission, intervalMs);
   };
 
   const handleStopSchedule = async () => {
-    scheduledTransmissions.forEach((timeoutId) => {
-      clearInterval(timeoutId);
-    });
-    scheduledTransmissions.clear();
-    scheduledCallsigns.delete(callsign);
-    scheduledCallsigns = scheduledCallsigns;
+    clearScheduleTimers();
     isSchedulingActive = false;
+    countdownProgress = 0;
+    countdownSeconds = 0;
 
     await releaseWakeLock();
 
@@ -194,12 +197,15 @@
   };
 
   const validateInput = async (): Promise<boolean> => {
-    const isValid = await validateAPRSCallsign(callsign, passcode);
-    if (!isValid) {
-      showError('Please enter both CALLSIGN and PASSCODE');
-      logToHistory('Validation failed: missing callsign or passcode', 'error');
+    const validation = validateAPRSCallsign(callsign, passcode);
+    if (!validation.valid) {
+      const message = validation.message ?? 'Validation failed';
+      showError(message);
+      logToHistory(`Validation failed: ${message}`, 'error');
+      return false;
     }
-    return isValid;
+
+    return true;
   };
 
   onMount(() => {
@@ -207,14 +213,13 @@
     if (settings.callsign) callsign = settings.callsign;
     if (settings.passcode) passcode = settings.passcode;
     if (settings.commentText) commentText = settings.commentText;
-    if (settings.statuText) statuText = settings.statuText;
+    if (settings.statusText) statusText = settings.statusText;
     if (settings.scheduleInterval) scheduleInterval = settings.scheduleInterval;
+    if (settings.lastGPSLocation) location = settings.lastGPSLocation;
   });
 
   onDestroy(async () => {
-    scheduledTransmissions.forEach((timeoutId) => {
-      clearInterval(timeoutId);
-    });
+    clearScheduleTimers();
     await releaseWakeLock();
   });
 </script>
@@ -236,7 +241,7 @@
           placeholder="N0CALL-1"
           class="input input-bordered input-sm w-full"
           bind:value={callsign}
-          on:change={(e) => updateSetting('callsign', callsign)}
+          on:change={() => updateSetting('callsign', callsign)}
           disabled={isSchedulingActive}
           maxlength="9"
         />
@@ -251,7 +256,7 @@
           placeholder="Code"
           class="input input-bordered input-sm w-full"
           bind:value={passcode}
-          on:change={(e) => updateSetting('passcode', passcode)}
+          on:change={() => updateSetting('passcode', passcode)}
           disabled={isSchedulingActive}
         />
       </label>
@@ -266,7 +271,7 @@
         placeholder="comment text"
         class="input input-bordered input-sm w-full"
         bind:value={commentText}
-        on:change={(e) => updateSetting('commentText', commentText)}
+        on:change={() => updateSetting('commentText', commentText)}
         maxlength="140"
       />
     </label>
@@ -279,8 +284,8 @@
         type="text"
         placeholder="status text"
         class="input input-bordered input-sm w-full"
-        bind:value={statuText}
-        on:change={(e) => updateSetting('statuText', statuText)}
+          bind:value={statusText}
+          on:change={() => updateSetting('statusText', statusText)}
         maxlength="140"
       />
     </label>
@@ -334,7 +339,7 @@
         placeholder="60"
         class="input input-bordered input-sm w-full"
         bind:value={scheduleInterval}
-        on:change={(e) => updateSetting('scheduleInterval', scheduleInterval)}
+        on:change={() => updateSetting('scheduleInterval', scheduleInterval)}
         disabled={isSchedulingActive}
       />
     </label>

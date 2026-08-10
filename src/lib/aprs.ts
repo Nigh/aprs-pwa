@@ -2,7 +2,7 @@ export interface APRSConfig {
   callsign: string;
   passcode: string;
   commentText?: string;
-  statuText?: string;
+  statusText?: string;
 }
 
 export interface APRSLocation {
@@ -26,7 +26,7 @@ export function generateAPRSPackets(
   latitude: number,
   longitude: number,
   commentText?: string,
-  statuText?: string,
+  statusText?: string,
   speed?: number
 ): string[] {
   const cleanCallsign = callsign.toUpperCase();
@@ -35,24 +35,21 @@ export function generateAPRSPackets(
   const lat = formatLatitude(latitude);
   const lon = formatLongitude(longitude);
   
-  // Build the APRS packet
-  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText (or with speed: !LAT/LON/SPEED[commentText)
-  // Format: CALLSIGN>APRS,TCPIP*:>statuText
+  // Build the APRS packet (APRS101 uncompressed: !lat/lonSYMBOL[CSE/SPD]comment)
+  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText (or with speed: !LAT/LON[000/SPDcommentText)
+  // Format: CALLSIGN>APRS,TCPIP*:>statusText
+  // ponytail: course hardcoded 000 (unknown); plumb GPS bearing when we care
   const head = `${cleanCallsign}>APRS,TCPIP*:`;
   let packets = []
   const formattedSpeed = formatSpeed(speed);
-  
-  if (formattedSpeed) {
-    packets.push(`${head}!${lat}/${lon}/${formattedSpeed}[`);
-  } else {
-    packets.push(`${head}!${lat}/${lon}[`);
-  }
+  const cseSpd = formattedSpeed ? `000/${formattedSpeed}` : '';
+  packets.push(`${head}!${lat}/${lon}[${cseSpd}`);
   
   if (commentText) {
     packets[0] += `${commentText}`;
   }
-  if (statuText) {
-    packets.push(`${head}>${statuText}`);
+  if (statusText) {
+    packets.push(`${head}>${statusText}`);
   }
   return packets;
 }
@@ -85,12 +82,76 @@ function formatSpeed(speedMps?: number): string | null {
   if (speedMps === undefined || speedMps === null || speedMps < 0) {
     return null;
   }
-  
-  const speedKnots = Math.round(speedMps * 1.94384);
+  // APRS CSE/SPD speed field is 3 digits (knots)
+  const speedKnots = Math.min(999, Math.round(speedMps * 1.94384));
   return String(speedKnots).padStart(3, '0');
 }
 
-export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLocation> {
+/**
+ * Calculate distance between two GPS coordinates using Haversine formula
+ * @param lat1 First latitude in degrees
+ * @param lon1 First longitude in degrees
+ * @param lat2 Second latitude in degrees
+ * @param lon2 Second longitude in degrees
+ * @returns Distance in meters
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+/**
+ * Calculate average speed based on two GPS positions
+ * @param previousLocation Previous GPS location
+ * @param currentLocation Current GPS location
+ * @returns Average speed in m/s, or null if calculation not possible
+ */
+export function calculateAverageSpeed(previousLocation: APRSLocation, currentLocation: APRSLocation): number | null {
+  if (!previousLocation.timestamp || !currentLocation.timestamp) {
+    return null;
+  }
+
+  const timeDifferenceMs = currentLocation.timestamp - previousLocation.timestamp;
+  
+  // Only calculate if previous position is less than 5 minutes old
+  if (timeDifferenceMs > 300000) { // 5 minutes = 300000ms
+    return null;
+  }
+
+  // Don't calculate if time difference is too small (less than 1 second)
+  if (timeDifferenceMs < 1000) {
+    return null;
+  }
+
+  const distance = calculateDistance(
+    previousLocation.latitude,
+    previousLocation.longitude,
+    currentLocation.latitude,
+    currentLocation.longitude
+  );
+
+  const timeDifferenceSeconds = timeDifferenceMs / 1000;
+  const averageSpeed = distance / timeDifferenceSeconds;
+
+  // Return null if calculated speed is unrealistic (e.g., > 200 m/s or ~720 km/h)
+  if (averageSpeed > 200) {
+    return null;
+  }
+
+  return averageSpeed;
+}
+
+export async function getGPSLocation(timeoutMs: number = 17000, previousLocation?: APRSLocation | null): Promise<APRSLocation> {
   return Promise.race([
     new Promise<APRSLocation>((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -100,14 +161,24 @@ export async function getGPSLocation(timeoutMs: number = 10000): Promise<APRSLoc
       
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          resolve({
+          const currentLocation: APRSLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
             altitude: position.coords.altitude ?? undefined,
             speed: position.coords.speed ?? undefined,
             timestamp: Date.now(),
-          });
+          };
+
+          // If GPS doesn't provide speed, try to calculate average speed from previous position
+          if ((currentLocation.speed === null || currentLocation.speed === undefined) && previousLocation) {
+            const calculatedSpeed = calculateAverageSpeed(previousLocation, currentLocation);
+            if (calculatedSpeed !== null) {
+              currentLocation.speed = calculatedSpeed;
+            }
+          }
+
+          resolve(currentLocation);
         },
         (error) => {
           reject(new Error(`Geolocation error: ${error.message}`));
@@ -151,16 +222,40 @@ export async function releaseWakeLock(): Promise<void> {
   }
 }
 
-export async function validateAPRSCallsign(callsign: string, passcode: string): Promise<boolean> {
-  if (!callsign || callsign.trim().length === 0) {
-    return false;
+export interface ValidationResult {
+  valid: boolean;
+  message?: string;
+}
+
+export function validateAPRSCallsign(callsign: string, passcode: string): ValidationResult {
+  const normalizedCallsign = callsign.trim().toUpperCase();
+  const normalizedPasscode = passcode.trim();
+
+  if (!normalizedCallsign) {
+    return { valid: false, message: 'Please enter a CALLSIGN' };
   }
-  
-  if (!passcode || passcode.trim().length === 0) {
-    return false;
+
+  if (!/^[A-Z0-9]{1,6}(-[0-9]{1,2})?$/.test(normalizedCallsign)) {
+    return { valid: false, message: 'CALLSIGN format is invalid (example: N0CALL-1)' };
   }
-  
-  return true;
+
+  const ssid = normalizedCallsign.split('-')[1];
+  if (ssid) {
+    const ssidValue = Number(ssid);
+    if (!Number.isInteger(ssidValue) || ssidValue < 0 || ssidValue > 15) {
+      return { valid: false, message: 'CALLSIGN SSID must be between 0 and 15' };
+    }
+  }
+
+  if (!normalizedPasscode) {
+    return { valid: false, message: 'Please enter a PASSCODE' };
+  }
+
+  if (!/^-?\d{1,5}$/.test(normalizedPasscode)) {
+    return { valid: false, message: 'PASSCODE format is invalid' };
+  }
+
+  return { valid: true };
 }
 
 export async function transmitAPRSPackets(
