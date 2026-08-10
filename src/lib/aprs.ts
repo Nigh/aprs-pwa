@@ -35,18 +35,15 @@ export function generateAPRSPackets(
   const lat = formatLatitude(latitude);
   const lon = formatLongitude(longitude);
   
-  // Build the APRS packet
-  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText (or with speed: !LAT/LON/SPEED[commentText)
+  // Build the APRS packet (APRS101 uncompressed: !lat/lonSYMBOL[CSE/SPD]comment)
+  // Format: CALLSIGN>APRS,TCPIP*:!LAT/LON[commentText (or with speed: !LAT/LON[000/SPDcommentText)
   // Format: CALLSIGN>APRS,TCPIP*:>statusText
+  // ponytail: course hardcoded 000 (unknown); plumb GPS bearing when we care
   const head = `${cleanCallsign}>APRS,TCPIP*:`;
   let packets = []
   const formattedSpeed = formatSpeed(speed);
-  
-  if (formattedSpeed) {
-    packets.push(`${head}!${lat}/${lon}/${formattedSpeed}[`);
-  } else {
-    packets.push(`${head}!${lat}/${lon}[`);
-  }
+  const cseSpd = formattedSpeed ? `000/${formattedSpeed}` : '';
+  packets.push(`${head}!${lat}/${lon}[${cseSpd}`);
   
   if (commentText) {
     packets[0] += `${commentText}`;
@@ -85,8 +82,8 @@ function formatSpeed(speedMps?: number): string | null {
   if (speedMps === undefined || speedMps === null || speedMps < 0) {
     return null;
   }
-  
-  const speedKnots = Math.round(speedMps * 1.94384);
+  // APRS CSE/SPD speed field is 3 digits (knots)
+  const speedKnots = Math.min(999, Math.round(speedMps * 1.94384));
   return String(speedKnots).padStart(3, '0');
 }
 
