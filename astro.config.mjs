@@ -20,8 +20,8 @@ export default defineConfig({
         name: 'APRS-TX Transmitter',
         short_name: 'APRS-TX',
         description: 'Automatic Packet Reporting System Transmitter for Amateur Radio',
-        theme_color: '#3b82f6',
-        background_color: '#ffffff',
+        theme_color: '#ffa1ad',
+        background_color: '#242424',
         display: 'standalone',
         categories: ['amateur-radio', 'communication'],
         icons: [
