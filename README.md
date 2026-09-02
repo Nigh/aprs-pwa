@@ -6,6 +6,10 @@ A Progressive Web Application for amateur radio operators to transmit their GPS 
 
 This application is based on the **Astro PWA Template** - a production-ready starter for building PWAs with Astro, Svelte, Tailwind CSS v4, and DaisyUI.
 
+## 📱 Android Version
+
+Looking for a more feature-complete Android experience? Check out [APRS-Android](https://github.com/Nigh/aprs-android), the Android version of APRS-TX, also developed by me.
+
 ## APRS-TX Features
 
 - 📍 **GPS Location Sharing** - Automatic location retrieval and APRS packet assembly
